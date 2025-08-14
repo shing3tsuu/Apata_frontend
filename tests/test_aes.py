@@ -11,6 +11,13 @@ def aes_cipher():
 
 @pytest.mark.asyncio
 async def test_encrypt_decrypt(aes_cipher):
+    """
+    Purpose: Validate symmetric encryption/decryption
+    Test Case: Encrypts plaintext → Decrypts ciphertext → Verifies original plaintext matches
+    Key Assertion: decrypted == plaintext
+    :param aes_cipher:
+    :return:
+    """
     plaintext = "Secret message"
     encrypted = await aes_cipher.encrypt(plaintext)
     decrypted = await aes_cipher.decrypt(encrypted)
@@ -19,14 +26,18 @@ async def test_encrypt_decrypt(aes_cipher):
 
 @pytest.mark.asyncio
 async def test_invalid_key():
+    """
+    Purpose: Verify key integrity protection
+    Test Case: Encrypts with key1, Attempts decryption with unrelated key2
+    Key Assertion: Raises ValueError on decryption attempt
+    :return:
+    """
     plaintext = "Secret message"
 
-    # Шифрование с ключом 1
     key1 = os.urandom(32)
     cipher1 = AES256Cipher(key1)
     encrypted = await cipher1.encrypt(plaintext)
 
-    # Попытка дешифрования с ключом 2
     key2 = os.urandom(32)
     cipher2 = AES256Cipher(key2)
 
@@ -36,12 +47,18 @@ async def test_invalid_key():
 
 @pytest.mark.asyncio
 async def test_tampered_ciphertext(aes_cipher):
+    """
+    Purpose: Verify authentication tag validation
+    Test Case: Encrypts plaintext, Modifies 1 byte in ciphertext, Attempts decryption of tampered data
+    Key Assertion: Raises ValueError during decryption
+    :param aes_cipher:
+    :return:
+    """
     plaintext = "Secret message"
     encrypted = await aes_cipher.encrypt(plaintext)
 
-    # Повреждаем шифротекст
     tampered = bytearray(base64.b64decode(encrypted))
-    tampered[15] ^= 0x01  # Изменяем один байт
+    tampered[15] ^= 0x01
     tampered_encrypted = base64.b64encode(tampered).decode()
 
     with pytest.raises(ValueError):
