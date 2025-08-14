@@ -19,7 +19,10 @@ class BaseAES256Cipher(ABC):
     """
 
     @abstractmethod
-    async def encrypt(self, plaintext: str) -> str:
+    async def encrypt(
+            self, 
+            plaintext: str
+    ) -> str:
         """
         Encrypts the plaintext using AES-256-GCM
         :param plaintext:
@@ -28,7 +31,10 @@ class BaseAES256Cipher(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    async def decrypt(self, ciphertext: str) -> str:
+    async def decrypt(
+            self, 
+            ciphertext: str
+    ) -> str:
         """
         Decrypts the ciphertext using AES-256-GCM
         :param ciphertext:
@@ -101,3 +107,4 @@ class AES256Cipher(BaseAES256Cipher):
             self.logger.error(f"Decryption failed: {e}")
 
             raise
+
