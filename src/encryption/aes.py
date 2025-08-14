@@ -37,6 +37,8 @@ class BaseAES256Cipher(ABC):
         raise NotImplementedError()
 
 class AES256Cipher(BaseAES256Cipher):
+    __slots__ = ('key', 'logger')
+    
     def __init__(self, key: bytes, logger: logging.Logger | None = None):
         if len(key) != 32:
             raise ValueError("AES key must be 32 bytes long")
@@ -97,4 +99,5 @@ class AES256Cipher(BaseAES256Cipher):
             raise
         except Exception as e:
             self.logger.error(f"Decryption failed: {e}")
+
             raise
