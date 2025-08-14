@@ -3,6 +3,12 @@ from src.encryption.ecdh import ECDHCipher
 
 @pytest.mark.asyncio
 async def test_private_key_consistency():
+    """
+    Purpose: Verify private key stability
+    Test Case: Retrieves private key twice from same instance
+    Key Assertion: private_key1 == private_key2
+    :return:
+    """
     cipher = ECDHCipher()
     private_key1 = cipher.get_private_key_pem()
     private_key2 = cipher.get_private_key_pem()
@@ -11,6 +17,12 @@ async def test_private_key_consistency():
 
 @pytest.mark.asyncio
 async def test_public_key_consistency():
+    """
+    Purpose: Verify public key stability
+    Test Case: Retrieves public key twice from same instance
+    Key Assertion: public_key1 == public_key2
+    :return:
+    """
     cipher = ECDHCipher()
     public_key1 = cipher.get_public_key()
     public_key2 = cipher.get_public_key()
@@ -19,6 +31,12 @@ async def test_public_key_consistency():
 
 @pytest.mark.asyncio
 async def test_shared_key_derivation():
+    """
+    Purpose: Validate shared secret derivation
+    Test Case: Alice and Bob exchange public keys, Both derive shared secret independently
+    Key Assertion: alice_shared == bob_shared
+    :return:
+    """
     alice = ECDHCipher()
     bob = ECDHCipher()
 
@@ -33,6 +51,12 @@ async def test_shared_key_derivation():
 
 @pytest.mark.asyncio
 async def test_different_shared_secrets():
+    """
+    Purpose: Verify distinct peer secrets
+    Test Case: Alice-Bob derive shared secret, Alice-Eve derive shared secret
+    Key Assertion: alice_bob != alice_eve
+    :return:
+    """
     alice = ECDHCipher()
     bob = ECDHCipher()
     eve = ECDHCipher()
@@ -45,6 +69,12 @@ async def test_different_shared_secrets():
 
 @pytest.mark.asyncio
 async def test_load_from_private_key():
+    """
+    Purpose: Validate PEM key loading
+    Test Case: Saves original private key, Creates new instance from saved key
+    Key Assertion: Loaded public key matches original
+    :return:
+    """
     original = ECDHCipher()
     private_key = original.get_private_key_pem()
 
