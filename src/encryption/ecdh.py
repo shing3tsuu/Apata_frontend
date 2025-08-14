@@ -52,6 +52,8 @@ class BaseECDHCipher(ABC):
         raise NotImplementedError()
 
 class ECDHCipher(BaseECDHCipher):
+    __slots__ = ('private_key', 'public_key', 'logger')
+    
     def __init__(self, private_key: ec.EllipticCurvePrivateKey | None = None, logger: logging.Logger | None = None):
         if private_key is None:
             self.private_key = ec.generate_private_key(ec.SECP384R1(), default_backend())
@@ -106,5 +108,6 @@ class ECDHCipher(BaseECDHCipher):
             info=b'apata_messenger_ecdh',
             backend=default_backend()
         ).derive(shared_secret)
+
 
         return derived_key
