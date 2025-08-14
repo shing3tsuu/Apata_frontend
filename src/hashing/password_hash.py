@@ -46,8 +46,10 @@ class BasePasswordHash(ABC):
 
 
 class PasswordHash(BasePasswordHash):
-    # Pre-generated dummy hash to prevent timing attacks
+    __slots__ = ('cost', 'min_password_length', 'logger')
+    
     DUMMY_HASH = b"$2b$12$K3C8hN5u9Qk7z2v1wY6ZceBp1jH4dE7fG8i9l0m1n2o3p4q5r6s7t8u9v0"
+    # Pre-generated dummy hash to prevent timing attacks
 
     def __init__(self, logger: Optional[logging.Logger] = None, min_password_length: int = 8):
         self.cost = 12
@@ -100,4 +102,5 @@ class PasswordHash(BasePasswordHash):
                 isinstance(hashed, str) and
                 hashed.startswith(('$2a$', '$2b$', '$2y$')) and
                 len(hashed) == 60
+
         )
