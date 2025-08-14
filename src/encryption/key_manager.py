@@ -59,6 +59,8 @@ class BaseKeyManager(ABC):
 
 
 class KeyManager(BaseKeyManager):
+    __slots__ = ('iterations', 'logger')
+    
     def __init__(self, iterations: int = 100000, logger: logging.Logger | None = None):
         self.iterations = iterations
         self.logger = logger or logging.getLogger(__name__)
@@ -135,4 +137,5 @@ class KeyManager(BaseKeyManager):
             return decrypted
         except InvalidTag:
             self.logger.error(f"Invalid password or corrupted data")
+
             raise ValueError
