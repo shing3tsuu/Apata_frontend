@@ -11,7 +11,13 @@ def key_manager():
 
 @pytest.mark.asyncio
 async def test_encrypt_decrypt(key_manager):
-    """Проверка шифрования/дешифрования ключа."""
+    """
+    Purpose: Verify private key encryption cycle
+    Test Case: Encrypts private key with password, Decrypts with same password
+    Key Assertion: decrypted == private_key
+    :param key_manager:
+    :return:
+    """
     ecdh = ECDHCipher()
     private_key = ecdh.get_private_key_pem()
     password = "secure_password_123"
@@ -24,7 +30,13 @@ async def test_encrypt_decrypt(key_manager):
 
 @pytest.mark.asyncio
 async def test_wrong_password(key_manager):
-    """Проверка реакции на неверный пароль."""
+    """
+    Purpose: Validate password verification
+    Test Case: Encrypts with password "correct_password", Attempts decryption with "wrong_password"
+    Key Assertion: Raises ValueError
+    :param key_manager:
+    :return:
+    """
     ecdh = ECDHCipher()
     private_key = ecdh.get_private_key_pem()
     password = "correct_password"
@@ -37,7 +49,13 @@ async def test_wrong_password(key_manager):
 
 @pytest.mark.asyncio
 async def test_custom_salt(key_manager):
-    """Проверка работы с пользовательской солью."""
+    """
+    Purpose: Verify salt handling
+    Test Case: Encrypts with custom salt, Decrypts and verifies salt persistence
+    Key Assertions: decrypted == private_key, encrypted[:16] == salt
+    :param key_manager:
+    :return:
+    """
     ecdh = ECDHCipher()
     private_key = ecdh.get_private_key_pem()
     password = "password"
