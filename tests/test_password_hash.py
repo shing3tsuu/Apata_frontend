@@ -9,33 +9,55 @@ def password_hasher():
 
 @pytest.mark.asyncio
 async def test_hash_and_verify(password_hasher):
-    """Проверка хеширования и верификации."""
+    """
+    Purpose: Validate password verification
+    Test Cases: Correct password: compare() → True, Wrong password: compare() → False
+    Key Assertions: Correct password verifies, Wrong password fails
+    :param password_hasher:
+    :return:
+    """
     password = "strong_password"
     hashed = await password_hasher.hashing(password)
 
-    # Проверка корректного пароля
     assert await password_hasher.compare(password, hashed) is True
 
-    # Проверка неверного пароля
     assert await password_hasher.compare("wrong_password", hashed) is False
 
 
 @pytest.mark.asyncio
 async def test_short_password(password_hasher):
-    """Проверка реакции на короткий пароль."""
+    """
+    Purpose: Enforce minimum password length
+    Test Case: Attempts to hash 5-character password
+    Key Assertion: Raises ValueError
+    :param password_hasher:
+    :return:
+    """
     with pytest.raises(ValueError):
         await password_hasher.hashing("short")
 
 
 @pytest.mark.asyncio
 async def test_invalid_hash(password_hasher):
-    """Проверка обработки невалидного хеша."""
+    """
+    Purpose: Handle malformed hashes
+    Test Case: Compares password against invalid hash
+    Key Assertion: Returns False
+    :param password_hasher:
+    :return:
+    """
     assert await password_hasher.compare("password", "invalid_hash") is False
 
 
 @pytest.mark.asyncio
 async def test_empty_password(password_hasher):
-    """Проверка обработки пустого пароля."""
+    """
+    Purpose: Handle empty passwords
+    Test Cases: Hashing empty string → ValueError, Comparing empty password → False
+    Key Assertions: Rejects empty password hashing, Empty comparison returns False
+    :param password_hasher:
+    :return:
+    """
     with pytest.raises(ValueError):
         await password_hasher.hashing("")
 
