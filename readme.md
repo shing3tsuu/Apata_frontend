@@ -1,142 +1,106 @@
-Frontend Application - Secure Messenger Client
+Frontend Service - Secure Messenger Client
 Overview
 
-A Flet-based desktop/mobile application that provides complete end-to-end encryption for messaging. The client handles all encryption/decryption locally and maintains a full message history in an encrypted local database.
-Architecture Diagram
-text
+A Flet-based desktop/mobile application providing end-to-end encrypted messaging with local data storage. The client maintains a complete encrypted message history while synchronizing with the backend service.
+Architecture
+Core Components
 
-User Input → Flet UI → Encryption Module → Local SQLite DB
-     ↑                           ↓
-     └── Decryption ←── Server Sync (HTTPS)
+    Flet Framework: Cross-platform client application
+
+    SQLite Database: Local encrypted message storage
+
+    Cryptography Module: Client-side encryption/decryption
+
+    Sync Engine: Background synchronization with backend
+
+Security Implementation
+
+    AES-256-GCM for message encryption
+
+    PBKDF2 for key derivation from user password
+
+    ECDH (P-384) for secure key exchange
+
+    Local database encryption using SQLCipher
+
+    Separate encryption keys for messages and database
 
 Key Features
 
-    End-to-End Encryption - All messages encrypted before leaving device
+    Complete offline functionality
 
-    Offline Capability - Full message history stored locally
+    End-to-end encrypted messaging
 
-    Cross-Platform - Runs on Windows, macOS, Linux, iOS and Android
+    Local message history
 
-    Local Database - SQLite with encryption for message storage
+    Secure contact management
 
-    Server Synchronization - Background sync with backend service
+    Background synchronization
 
-Security Implementation
-Encryption Scheme
-text
+    Cross-platform support (Windows, macOS, Linux, iOS, Android)
 
-User Password → PBKDF2 → Master Key → AES-GCM → Database Encryption
-                             ↓
-                 Session Key → AES-GCM → Message Encryption
+Cryptographic Workflow
 
-Key Management
+    User password derives master key via PBKDF2
 
-    Master Key - Derived from user password using PBKDF2
+    Master key encrypts/decrypts local SQLite database
 
-    Session Keys - Generated per conversation using ECDH key exchange
+    ECDH generates ephemeral session keys for each conversation
 
-    Local Storage - Encrypted SQLite database using SQLCipher
+    AES-256-GCM encrypts/decrypts individual messages
 
-Component Structure
-UI Layer (Flet)
+    Public keys exchanged via backend for initial contact setup
 
-    Login/Registration screens
+Data Flow
 
-    Conversation list view
+    Outgoing Messages:
 
-    Message composition interface
+        Encrypted with recipient's public key + session key
 
-    Contact management
+        Stored locally in SQLite
 
-Business Logic Layer
+        Pushed to backend service
 
-    Authentication manager
+        Removed from backend after 7 days
 
-    Message encryption/decryption
+    Incoming Messages:
 
-    Contact management
+        Retrieved from backend during sync
 
-    Server synchronization
+        Decrypted using recipient's private key
 
-Data Layer
+        Stored in local encrypted SQLite database
 
-    Encrypted SQLite database
+        Delivery confirmation sent to backend
 
-    Local key storage
+Sync Mechanism
 
-    Cached server data
+    Periodic background synchronization
 
-Database Schema
-Local Messages Table
+    Conflict resolution using timestamp-based approach
 
-    id - Primary key
+    Delta updates to minimize data transfer
 
-    server_id - Corresponding server message ID
-
-    conversation_id - Thread identifier
-
-    sender_id - Message author
-
-    recipient_id - Message recipient
-
-    encrypted_content - Encrypted message content
-
-    timestamp - Message creation time
-
-    is_delivered - Delivery status
-
-Local Keys Table
-
-    id - Primary key
-
-    conversation_id - Thread identifier
-
-    public_key - Other party's public key
-
-    private_key - Our private key (encrypted)
-
-    shared_secret - Derived shared secret (encrypted)
-
-Synchronization Process
-
-    Authenticate - Login with JWT tokens
-
-    Download New Messages - Retrieve undelivered messages from server
-
-    Decrypt Messages - Decrypt using local keys
-
-    Store Locally - Save to encrypted local database
-
-    Confirm Delivery - Notify server of successful receipt
-
-    Upload Outgoing - Send new messages to server
+    Retry logic for failed operations
 
 Deployment Considerations
 
-    Single Executable - PyInstaller for standalone distribution
+    Single executable output via PyInstaller
 
-    Auto-Updates - Mechanism for delivering client updates
+    Automatic updates mechanism
 
-    Key Backup - Optional encrypted cloud backup of keys
+    Platform-specific packaging
 
-    Multi-Device Support - Manual transfer process between devices
+    Secure storage of encryption keys
 
-Getting Started
+Security Advantages
 
-    Install Flet: pip install flet
+    Zero Knowledge: Server never has access to decrypted messages
 
-    Run application: python main.py
+    Forward Secrecy: Ephemeral session keys for each conversation
 
-    Register new account or login
+    Future Proof: Cryptographic agility through client-side implementation
 
-    Start secure messaging
+    Device Independence: Migration possible through encrypted backup/restore
 
-Security Considerations
-
-    No Key Escrow - Server never has access to decryption keys
-
-    Forward Secrecy - Each conversation has unique session keys
-
-    Local Storage - Messages persist only on user's device
-
-    Verification - Key fingerprint verification for contacts
+This architecture represents a modern approach to secure messaging that prioritizes user privacy while maintaining usability across multiple platforms.
