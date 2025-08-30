@@ -6,51 +6,43 @@ import time
 import base64
 import secrets
 from jose import jwt
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import ec
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.backends import default_backend
+import asyncio
 
-# Базовый URL API
+from src.encryption.ecdsa import ECDSAClient
+
 BASE_URL = "http://127.0.0.1:8000/"
 
+ecdsa_client = ECDSAClient()
 
-def generate_test_keys():
+async def generate_test_keys():
     """
-    Generate test keys for JWT
-    Using ECDSA with SECP384R1 curve (P-384), can change in future on x25519
-    :return:
+    Generate test keys using ECDSAClient
+    :return: Tuple of (private_key, public_key) in PEM format
     """
-    private_key = ec.generate_private_key(ec.SECP384R1())
-    public_key = private_key.public_key()
+    return await ecdsa_client.generate_key_pair()
 
-    private_pem = private_key.private_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PrivateFormat.PKCS8,
-        encryption_algorithm=serialization.NoEncryption()
-    )
-
-    public_pem = public_key.public_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PublicFormat.SubjectPublicKeyInfo
-    )
-
-    return private_pem.decode('utf-8'), public_pem.decode('utf-8')
+def generate_test_keys_sync():
+    """
+    Synchronous wrapper for key generation
+    :return: Tuple of (private_key, public_key) in PEM format
+    """
+    return asyncio.run(generate_test_keys())
 
 # Test data
 TEST_USERNAME = f"testuser_{int(time.time())}"
-TEST_PRIVATE_KEY, TEST_PUBLIC_KEY = generate_test_keys()
-
+TEST_ECDSA_PRIVATE_KEY, TEST_ECDSA_PUBLIC_KEY = generate_test_keys_sync()
+TEST_ECDH_PRIVATE_KEY, TEST_ECDH_PUBLIC_KEY = generate_test_keys_sync()
 
 @pytest.fixture(scope="module")
 def auth_headers():
     """
     Fixture for creating a test user and getting a token
     """
-    # Register a new use
+    # Register a new user
     register_data = {
         "username": TEST_USERNAME,
-        "public_key": TEST_PUBLIC_KEY
+        "ecdsa_public_key": TEST_ECDSA_PUBLIC_KEY,
+        "ecdh_public_key": TEST_ECDH_PUBLIC_KEY
     }
 
     response = requests.post(f"{BASE_URL}/register", json=register_data)
@@ -62,19 +54,10 @@ def auth_headers():
     challenge_data = challenge_response.json()
     challenge = challenge_data["challenge"]
 
-    # Sign the challenge with a private key
-    private_key = serialization.load_pem_private_key(
-        TEST_PRIVATE_KEY.encode(),
-        password=None,
-        backend=default_backend()
+    # Sign the challenge using ECDSA client
+    signature_b64 = asyncio.run(
+        ecdsa_client.sign_message(TEST_ECDSA_PRIVATE_KEY, challenge)
     )
-
-    signature = private_key.sign(
-        challenge.encode(),
-        ec.ECDSA(hashes.SHA256())
-    )
-
-    signature_b64 = base64.b64encode(signature).decode('utf-8')
 
     # Authenticate using a signature
     login_data = {
@@ -89,18 +72,19 @@ def auth_headers():
 
     return {"Authorization": f"Bearer {access_token}"}
 
-
 def test_register_user():
     """
     New user registration test
     :return:
     """
     username = f"newuser_{int(time.time())}"
-    public_key = generate_test_keys()[1]
+    ecdsa_public_key = generate_test_keys_sync()[1]
+    ecdh_public_key = generate_test_keys_sync()[1]
 
     register_data = {
         "username": username,
-        "public_key": public_key
+        "ecdsa_public_key": ecdsa_public_key,
+        "ecdh_public_key": ecdh_public_key
     }
 
     response = requests.post(f"{BASE_URL}/register", json=register_data)
@@ -109,16 +93,17 @@ def test_register_user():
     assert "id" in data
     assert data["username"] == username
 
-
 def test_register_existing_user(auth_headers):
     """
     Test attempt to register an existing user
     """
-    public_key = generate_test_keys()[1]
+    ecdsa_public_key = generate_test_keys_sync()[1]
+    ecdh_public_key = generate_test_keys_sync()[1]
 
     register_data = {
         "username": TEST_USERNAME,
-        "public_key": public_key
+        "ecdsa_public_key": ecdsa_public_key,
+        "ecdh_public_key": ecdh_public_key
     }
 
     response = requests.post(f"{BASE_URL}/register", json=register_data)
@@ -126,7 +111,6 @@ def test_register_existing_user(auth_headers):
     data = response.json()
     assert "detail" in data
     assert "already exists" in data["detail"].lower()
-
 
 def test_login_success():
     """
@@ -138,19 +122,10 @@ def test_login_success():
     challenge_data = challenge_response.json()
     challenge = challenge_data["challenge"]
 
-    # Sign challenge
-    private_key = serialization.load_pem_private_key(
-        TEST_PRIVATE_KEY.encode(),
-        password=None,
-        backend=default_backend()
+    # Sign challenge using ECDSA client
+    signature_b64 = asyncio.run(
+        ecdsa_client.sign_message(TEST_ECDSA_PRIVATE_KEY, challenge)
     )
-
-    signature = private_key.sign(
-        challenge.encode(),
-        ec.ECDSA(hashes.SHA256())
-    )
-
-    signature_b64 = base64.b64encode(signature).decode('utf-8')
 
     # Auth
     login_data = {
@@ -163,7 +138,6 @@ def test_login_success():
     data = response.json()
     assert "access_token" in data
     assert data["token_type"] == "bearer"
-
 
 def test_login_invalid_signature():
     """
@@ -189,7 +163,6 @@ def test_login_invalid_signature():
     assert "detail" in data
     assert "invalid" in data["detail"].lower()
 
-
 def test_login_nonexistent_user():
     """
     Test login with nonexistent user
@@ -210,7 +183,8 @@ def test_get_current_user(auth_headers):
     data = response.json()
     assert data["name"] == TEST_USERNAME
     assert "id" in data
-    assert "public_key" in data
+    assert "ecdsa_public_key" in data
+    assert "ecdh_public_key" in data
 
 
 def test_get_current_user_unauthorized():
@@ -230,18 +204,18 @@ def test_get_public_key(auth_headers):
     response = requests.get(f"{BASE_URL}/me", headers=auth_headers)
     user_id = response.json()["id"]
 
-    response = requests.get(f"{BASE_URL}/public-key/{user_id}", headers=auth_headers)
+    response = requests.get(f"{BASE_URL}/ecdsa-public-key/{user_id}", headers=auth_headers)
     assert response.status_code == 200
     data = response.json()
     assert data["user_id"] == user_id
-    assert data["public_key"] == TEST_PUBLIC_KEY
+    assert data["ecdsa_public_key"] == TEST_ECDSA_PUBLIC_KEY
 
 
 def test_get_nonexistent_public_key(auth_headers):
     """
     Test of getting public key of non-existent user
     """
-    response = requests.get(f"{BASE_URL}/public-key/999999", headers=auth_headers)
+    response = requests.get(f"{BASE_URL}/ecdsa-public-key/999999", headers=auth_headers)
     assert response.status_code == 404
     data = response.json()
     assert "detail" in data
@@ -252,10 +226,10 @@ def test_update_public_key(auth_headers):
     Public Key Update Test
     """
     # Generating new key
-    new_public_key = generate_test_keys()[1]
+    new_public_key = generate_test_keys_sync()[1]
 
     update_data = {
-        "public_key": new_public_key
+        "ecdsa_public_key": new_public_key
     }
 
     response = requests.put(
@@ -266,26 +240,26 @@ def test_update_public_key(auth_headers):
 
     assert response.status_code == 200
     data = response.json()
-    assert data["status"] == "public key updated"
+    assert data["status"] == "ecdsa public key updated"
 
     # Проверяем, что ключ действительно обновился
     response = requests.get(f"{BASE_URL}/me", headers=auth_headers)
     user_id = response.json()["id"]
 
-    response = requests.get(f"{BASE_URL}/public-key/{user_id}", headers=auth_headers)
+    response = requests.get(f"{BASE_URL}/ecdsa-public-key/{user_id}", headers=auth_headers)
     assert response.status_code == 200
     data = response.json()
-    assert data["public_key"] == new_public_key
+    assert data["ecdsa_public_key"] == new_public_key
 
 
 def test_update_public_key_unauthorized():
     """
     Test updating public key without authentication
     """
-    new_public_key = generate_test_keys()[1]
+    new_public_key = generate_test_keys_sync()[1]
 
     update_data = {
-        "public_key": new_public_key
+        "ecdsa_public_key": new_public_key
     }
 
     response = requests.put(f"{BASE_URL}/update-key", json=update_data)
