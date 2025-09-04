@@ -1,6 +1,6 @@
 import logging
 from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.hazmat.primitives.asymmetric import x25519
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
@@ -10,104 +10,89 @@ from abc import ABC, abstractmethod
 
 class BaseECDHCipher(ABC):
     @abstractmethod
-    def get_public_key(
-            self
-    ) -> str:
+    async def generate_key_pair(self) -> tuple[str, str]:
         """
-        Returns the public key in PEM format
+        Generate a key pair (private, public) in PEM format
         :return:
         """
         raise NotImplementedError()
 
     @abstractmethod
-    def get_private_key_pem(
-            self
-    ) -> str:
+    async def derive_shared_key(self, private_key_pem: str, peer_public_key_pem: str) -> bytes:
         """
-        Returns the private key in PEM format (without password)
+        Derives a shared key using the provided private key and peer's public key
+        :param private_key_pem: PEM-encoded private key
+        :param peer_public_key_pem: PEM-encoded public key
         :return:
         """
         raise NotImplementedError()
 
-    @abstractmethod
-    def from_private_key_pem(
-            self, pem_data: bytes
-    ) -> 'ECDHCipher':
-        """
-        Creates an instance from a private key in PEM format
-        :param pem_data:
-        :return:
-        """
-        raise NotImplementedError()
-
-    @abstractmethod
-    async def derive_shared_key(
-            self, peer_public_key_pem: str
-    ) -> bytes:
-        """
-        Derives a shared key using the provided peer's public key
-        :param peer_public_key_pem:
-        :return:
-        """
-        raise NotImplementedError()
-
-class ECDHCipher(BaseECDHCipher):
-    __slots__ = ('private_key', 'public_key', 'logger')
-    
-    def __init__(self, private_key: ec.EllipticCurvePrivateKey | None = None, logger: logging.Logger | None = None):
-        if private_key is None:
-            self.private_key = ec.generate_private_key(ec.SECP384R1(), default_backend())
-        else:
-            if private_key and private_key.key_size < 384:
-                self.logger.error("Insecure key size")
-                raise ValueError
-            else:
-                self.private_key = private_key
-        self.public_key = self.private_key.public_key()
+class X25519Cipher(BaseECDHCipher):
+    def __init__(self, logger: logging.Logger | None = None):
         self.logger = logger or logging.getLogger(__name__)
 
-    def get_public_key(self) -> str:
-        pem_data = self.public_key.public_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PublicFormat.SubjectPublicKeyInfo
-        )
-        return pem_data.decode("ascii")
+    async def generate_key_pair(self) -> tuple[str, str]:
+        try:
+            loop = asyncio.get_running_loop()
+            return await loop.run_in_executor(None, self._generate_key_pair)
+        except Exception as e:
+            self.logger.error("Error generating key pair: %s", str(e))
+            raise
 
-    def get_private_key_pem(self) -> bytes:
-        return self.private_key.private_bytes(
+    def _generate_key_pair(self) -> tuple[str, str]:
+        # Generate private key using X25519
+        private_key = x25519.X25519PrivateKey.generate()
+
+        # Serialize private key to PEM format
+        private_pem = private_key.private_bytes(
             encoding=serialization.Encoding.PEM,
             format=serialization.PrivateFormat.PKCS8,
             encryption_algorithm=serialization.NoEncryption()
-        )
+        ).decode('utf-8')
 
-    @classmethod
-    def from_private_key_pem(cls, pem_data: bytes) -> 'ECDHCipher':
+        # Get public key and serialize to PEM format
+        public_key = private_key.public_key()
+        public_pem = public_key.public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo
+        ).decode('utf-8')
+
+        return private_pem, public_pem
+
+    async def derive_shared_key(self, private_key_pem: str, peer_public_key_pem: str) -> bytes:
+        try:
+            loop = asyncio.get_running_loop()
+            return await loop.run_in_executor(
+                None, self._derive_shared_key, private_key_pem, peer_public_key_pem
+            )
+        except Exception as e:
+            self.logger.error("Error deriving shared key: %s", str(e))
+            raise
+
+    def _derive_shared_key(self, private_key_pem: str, peer_public_key_pem: str) -> bytes:
+        # Load private key
         private_key = serialization.load_pem_private_key(
-            pem_data,
+            private_key_pem.encode(),
             password=None,
             backend=default_backend()
         )
-        return cls(private_key)
 
-    async def derive_shared_key(self, peer_public_key_pem: str) -> bytes:
-        loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(None, self._safe_derive_shared_key, peer_public_key_pem)
-
-    def _safe_derive_shared_key(self, peer_public_key_pem: str) -> bytes:
+        # Load peer public key
         peer_public_key = serialization.load_pem_public_key(
             peer_public_key_pem.encode(),
             backend=default_backend()
         )
 
-        shared_secret = self.private_key.exchange(ec.ECDH(), peer_public_key)
+        # Perform key exchange (X25519 uses different method)
+        shared_secret = private_key.exchange(peer_public_key)
 
+        # Derive key using HKDF
         derived_key = HKDF(
-            algorithm=hashes.SHA256(),
+            algorithm=hashes.SHA512(),
             length=32,
             salt=None,
-            info=b'apata_messenger_ecdh',
+            info=b'apata_messenger_x25519',
             backend=default_backend()
         ).derive(shared_secret)
-
 
         return derived_key
