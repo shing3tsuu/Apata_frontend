@@ -5,9 +5,11 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
 from cryptography.exceptions import InvalidTag
-from cryptography.hazmat.primitives import constant_time
 from abc import ABC, abstractmethod
 import logging
+from typing import Tuple
+import secrets
+
 
 class BaseKeyManager(ABC):
     @abstractmethod
@@ -15,52 +17,86 @@ class BaseKeyManager(ABC):
             self,
             password: str,
             salt: bytes,
-            iterations: int = 100000
+            iterations: int = 600000
     ) -> bytes:
         """
-        Generates an AES key from a password
-        PBKDF2 key derivation implementation
-        :param password: User password
-        :param salt: Cryptographic salt
-        :param iterations: PBKDF2 iterations
-        :return: Derived encryption key
+        Derive key from password (PBKDF2HMAC)
+        :param password:
+        :param salt:
+        :param iterations:
+        :return:
         """
         raise NotImplementedError()
 
     @abstractmethod
-    async def encrypt_private_key(
+    async def generate_master_key(
+            self
+    ) -> bytes:
+        """
+        Generate a random master key
+        """
+        raise NotImplementedError()
+
+    @abstractmethod
+    async def encrypt_with_master_key(
             self,
-            private_key_pem: bytes,
-            password: str,
-            salt: bytes | None = None
+            data: bytes,
+            master_key: bytes
     ) -> bytes:
         """
-        Encrypts private key using password
-        :param private_key_pem: Private key in PEM format
-        :param password: Encryption password
-        :param salt: Optional predefined salt
-        :return: Tuple (encrypted_data, salt)
+        Encrypt data using master key
+        :param data:
+        :param master_key:
+        :return:
         """
         raise NotImplementedError()
 
     @abstractmethod
-    async def decrypt_private_key(
+    async def decrypt_with_master_key(
             self,
             encrypted_data: bytes,
-            password: str
+            master_key: bytes
     ) -> bytes:
         """
-        Decrypts private key using password
-        :param encrypted_data: Encrypted private key
-        :param password: Decryption password
-        :return: Decrypted private key in PEM format
+        Decrypt data using master key
+        :param encrypted_data:
+        :param master_key:
+        :return:
+        """
+        raise NotImplementedError()
+
+    @abstractmethod
+    async def encrypt_master_key(
+            self,
+            master_key: bytes,
+            password: str
+    ) -> Tuple[bytes, bytes]:
+        """
+        Encrypt master key with password
+        :param master_key:
+        :param password:
+        :return:
+        """
+        raise NotImplementedError()
+
+    @abstractmethod
+    async def decrypt_master_key(
+            self,
+            encrypted_master_key: bytes,
+            password: str,
+            salt: bytes
+    ) -> bytes:
+        """
+        Decrypt master key with password
+        :param encrypted_master_key:
+        :param password:
+        :param salt:
+        :return:
         """
         raise NotImplementedError()
 
 
 class KeyManager(BaseKeyManager):
-    __slots__ = ('iterations', 'logger')
-    
     def __init__(self, iterations: int = 100000, logger: logging.Logger | None = None):
         self.iterations = iterations
         self.logger = logger or logging.getLogger(__name__)
@@ -70,7 +106,7 @@ class KeyManager(BaseKeyManager):
             iterations = self.iterations
 
         kdf = PBKDF2HMAC(
-            algorithm=hashes.SHA256(),
+            algorithm=hashes.SHA512(),
             length=32,
             salt=salt,
             iterations=iterations,
@@ -78,52 +114,83 @@ class KeyManager(BaseKeyManager):
         )
         return kdf.derive(password.encode())
 
-    async def encrypt_private_key(self, private_key_pem: bytes, password: str, salt: bytes | None = None) -> bytes:
+    async def generate_master_key(self) -> bytes:
+        """Generate a random 256-bit master key"""
+        return secrets.token_bytes(32)
+
+    async def encrypt_with_master_key(self, data: bytes, master_key: bytes) -> bytes:
+        """Encrypt data using AES-GCM with master key"""
         loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(None, self._safe_encrypt_private_key, private_key_pem, password, salt)
+        return await loop.run_in_executor(None, self._encrypt_with_master_key, data, master_key)
 
-    def _safe_encrypt_private_key(self, private_key_pem: bytes, password: str, salt: bytes | None = None) -> bytes:
-        # Generate salt if not provided
-        salt = salt or os.urandom(16)
+    def _encrypt_with_master_key(self, data: bytes, master_key: bytes) -> bytes:
+        nonce = os.urandom(12)
+        cipher = Cipher(
+            algorithms.AES(master_key),
+            modes.GCM(nonce),
+            backend=default_backend()
+        )
+        encryptor = cipher.encryptor()
+        ciphertext = encryptor.update(data) + encryptor.finalize()
+        return nonce + encryptor.tag + ciphertext
 
-        # Derive encryption key from password
+    async def decrypt_with_master_key(self, encrypted_data: bytes, master_key: bytes) -> bytes:
+        """Decrypt data using AES-GCM with master key"""
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, self._decrypt_with_master_key, encrypted_data, master_key)
+
+    def _decrypt_with_master_key(self, encrypted_data: bytes, master_key: bytes) -> bytes:
+        if len(encrypted_data) < 28:  # 12 (nonce) + 16 (tag)
+            raise ValueError("Invalid encrypted data")
+
+        nonce = encrypted_data[:12]
+        tag = encrypted_data[12:28]
+        ciphertext = encrypted_data[28:]
+
+        cipher = Cipher(
+            algorithms.AES(master_key),
+            modes.GCM(nonce, tag),
+            backend=default_backend()
+        )
+        decryptor = cipher.decryptor()
+        return decryptor.update(ciphertext) + decryptor.finalize()
+
+    async def encrypt_master_key(self, master_key: bytes, password: str) -> Tuple[bytes, bytes]:
+        """Encrypt master key with password-derived key"""
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, self._encrypt_master_key, master_key, password)
+
+    def _encrypt_master_key(self, master_key: bytes, password: str) -> Tuple[bytes, bytes]:
+        salt = os.urandom(16)
         key = self.derive_key_from_password(password, salt)
 
-        # Generate random nonce
         nonce = os.urandom(12)
-
-        # Encrypt using AES-GCM
         cipher = Cipher(
             algorithms.AES(key),
             modes.GCM(nonce),
             backend=default_backend()
         )
         encryptor = cipher.encryptor()
-        ciphertext = encryptor.update(private_key_pem) + encryptor.finalize()
+        ciphertext = encryptor.update(master_key) + encryptor.finalize()
 
-        # Combine salt + nonce + tag + ciphertext
-        encrypted_data = salt + nonce + encryptor.tag + ciphertext
-        return encrypted_data
+        encrypted_data = nonce + encryptor.tag + ciphertext
+        return encrypted_data, salt  # Возвращаем отдельно
 
-    async def decrypt_private_key(self, encrypted_data: bytes, password: str) -> bytes:
+    async def decrypt_master_key(self, encrypted_master_key: bytes, password: str, salt: bytes) -> bytes:
+        """Decrypt master key with password"""
         loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(None, self._safe_decrypt_private_key, encrypted_data, password)
+        return await loop.run_in_executor(None, self._decrypt_master_key, encrypted_master_key, password, salt)
 
-    def _safe_decrypt_private_key(self, encrypted_data: bytes, password: str) -> bytes:
-        if len(encrypted_data) < 44:  # 16 (salt) + 12 (nonce) + 16 (tag)
-            self.logger.error(f"Invalid encrypted data")
-            raise ValueError
+    def _decrypt_master_key(self, encrypted_master_key: bytes, password: str, salt: bytes) -> bytes:
+        if len(encrypted_master_key) < 28:  # 12 (nonce) + 16 (tag)
+            raise ValueError("Invalid encrypted master key")
 
-        # Extract components from encrypted data
-        salt = encrypted_data[:16]
-        nonce = encrypted_data[16:28]
-        tag = encrypted_data[28:44]
-        ciphertext = encrypted_data[44:]
+        nonce = encrypted_master_key[:12]
+        tag = encrypted_master_key[12:28]
+        ciphertext = encrypted_master_key[28:]
 
-        # Derive decryption key from password
         key = self.derive_key_from_password(password, salt)
 
-        # Decrypt using AES-GCM
         cipher = Cipher(
             algorithms.AES(key),
             modes.GCM(nonce, tag),
@@ -132,10 +199,28 @@ class KeyManager(BaseKeyManager):
         decryptor = cipher.decryptor()
 
         try:
-            # Attempt decryption and verify authentication tag
-            decrypted = decryptor.update(ciphertext) + decryptor.finalize()
-            return decrypted
+            return decryptor.update(ciphertext) + decryptor.finalize()
         except InvalidTag:
-            self.logger.error(f"Invalid password or corrupted data")
+            raise ValueError("Invalid password or corrupted data")
 
-            raise ValueError
+    # Maintaining backward compatibility
+    async def encrypt_private_key(self, private_key_pem: bytes, password: str, salt: bytes | None = None) -> bytes:
+        """Legacy method for direct encryption"""
+        master_key = await self.generate_master_key()
+        encrypted_data = await self.encrypt_with_master_key(private_key_pem, master_key)
+        encrypted_master_key, salt = await self.encrypt_master_key(master_key, password)
+
+        # Формат: salt + encrypted_master_key + encrypted_data
+        return salt + encrypted_master_key + encrypted_data
+
+    async def decrypt_private_key(self, encrypted_data: bytes, password: str) -> bytes:
+        """Legacy method for direct decryption"""
+        if len(encrypted_data) < 16 + 28:  # salt (16) + minimal encrypted_master_key (28)
+            raise ValueError("Invalid encrypted data")
+
+        salt = encrypted_data[:16]
+        encrypted_master_key = encrypted_data[16:16 + 28]
+        encrypted_private_key = encrypted_data[16 + 28:]
+
+        master_key = await self.decrypt_master_key(encrypted_master_key, password, salt)
+        return await self.decrypt_with_master_key(encrypted_private_key, master_key)
