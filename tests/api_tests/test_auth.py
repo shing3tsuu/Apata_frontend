@@ -8,12 +8,11 @@ import secrets
 from jose import jwt
 import asyncio
 
-from src.encryption.ecdsa import ECDSAClient
-from src.encryption.ecdh import X25519Cipher
+from src.adapters.encryption.service import X25519Cipher, SECP384R1Signature
 
 BASE_URL = "http://127.0.0.1:8000/"
 
-ecdsa_client = ECDSAClient()
+ecdsa_client = SECP384R1Signature()
 ecdh_cipher = X25519Cipher()
 
 async def generate_ecdsa_test_keys():
@@ -367,4 +366,5 @@ def test_challenge_expiration():
 
     response = requests.post(f"{BASE_URL}/login", json=login_data)
     # The server can return 400 (challenge not found) or 401 (invalid signature)
+
     assert response.status_code in [400, 401]
