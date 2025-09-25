@@ -1,7 +1,7 @@
 import pytest
 import asyncio
-from src.encryption.ecdh import X25519Cipher
 
+from src.adapters.encryption.service import X25519Cipher
 
 @pytest.mark.asyncio
 async def test_key_exchange():
@@ -101,4 +101,5 @@ async def test_deterministic_shared_key():
     shared3 = await cipher.derive_shared_key(private1, public2)
 
     # All should be identical
+
     assert shared1 == shared2 == shared3
