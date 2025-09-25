@@ -1,7 +1,7 @@
 import pytest
 import os
 import base64
-from src.encryption.aes import AESGCMCipher
+from src.adapters.encryption.service import AESGCMCipher
 
 @pytest.fixture
 def aes_cipher():
@@ -62,4 +62,5 @@ async def test_tampered_ciphertext(aes_cipher):
     tampered_encrypted = base64.b64encode(tampered).decode()
 
     with pytest.raises(ValueError):
+
         await aes_cipher.decrypt(tampered_encrypted)
