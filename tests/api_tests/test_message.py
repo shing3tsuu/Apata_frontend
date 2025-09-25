@@ -6,11 +6,9 @@ import base64
 import asyncio
 from test_auth import BASE_URL, generate_ecdsa_test_keys_sync, generate_ecdh_test_keys_sync
 
-# Импортируем ECDSAClient для подписи сообщений
-from src.encryption.ecdsa import ECDSAClient
+from src.adapters.encryption.service import SECP384R1Signature
 
-# Создаем экземпляр ECDSAClient для подписи
-ecdsa_client = ECDSAClient()
+ecdsa_client = SECP384R1Signature()
 
 
 @pytest.fixture(scope="function")
@@ -331,4 +329,5 @@ def test_token_refresh(test_user1, test_user2):
         json=message_data,
         headers=new_headers
     )
+
     assert response.status_code == 201
