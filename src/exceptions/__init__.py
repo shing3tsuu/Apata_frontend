@@ -1,1 +1,1 @@
-from .exceptions import UserAlreadyExistsError
+from .exceptions import *
