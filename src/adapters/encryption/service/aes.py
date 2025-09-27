@@ -9,21 +9,15 @@ import logging
 
 
 class AbstractAES256Cipher(ABC):
-    """
-    Stateless AES-256-GCM Cipher interface
-    Usage example:
-    cipher = AESGCMCipher()
-    encrypted = await cipher.encrypt("secret", key)
-    """
-
     @abstractmethod
     async def encrypt(
             self,
             plaintext: str,
-            key: bytes  # Ключ передается как параметр
+            key: bytes
     ) -> str:
         """
-        Encrypts the plaintext using AES-256-GCM
+        Encrypts the plaintext using symmetric block cipher algorithm
+        (Modes: AES-256-GCM, AES-256-GCM-SIV (possible in future), ChaCha20-Poly1305 (possible in future))
         :param plaintext: Text to encrypt
         :param key: 32-byte encryption key
         :return: Base64-encoded encrypted data
@@ -37,7 +31,8 @@ class AbstractAES256Cipher(ABC):
             key: bytes  # Ключ передается как параметр
     ) -> str:
         """
-        Decrypts the ciphertext using AES-256-GCM
+        Decrypts the plaintext using symmetric block cipher algorithm
+        (Modes: AES-256-GCM, AES-256-GCM-SIV (possible in future), ChaCha20-Poly1305 (possible in future))
         :param ciphertext: Base64-encoded encrypted data
         :param key: 32-byte decryption key
         :return: Decrypted text
