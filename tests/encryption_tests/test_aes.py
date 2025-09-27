@@ -60,7 +60,6 @@ async def test_tampered_ciphertext():
         key = os.urandom(32)
         encrypted = await cipher.encrypt(plaintext, key)
 
-        # Подменяем байт в ciphertext
         tampered = bytearray(base64.b64decode(encrypted))
         tampered[15] ^= 0x01
         tampered_encrypted = base64.b64encode(tampered).decode()
@@ -116,3 +115,4 @@ async def test_empty_plaintext():
         assert decrypted == plaintext
     finally:
         await close_container(container)
+
