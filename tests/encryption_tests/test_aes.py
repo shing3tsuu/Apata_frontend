@@ -1,66 +1,118 @@
 import pytest
 import os
 import base64
-from src.adapters.encryption.service import AESGCMCipher
+from dishka import make_async_container
 
-@pytest.fixture
-def aes_cipher():
-    key = os.urandom(32)
-    return AESGCMCipher(key)
+from src.providers import AppProvider
+from src.adapters.encryption.service import AbstractAES256Cipher
+
+
+async def get_aes_cipher():
+    container = make_async_container(AppProvider())
+    async with container() as request_container:
+        cipher = await request_container.get(AbstractAES256Cipher)
+        return cipher, container
+
+
+async def close_container(container):
+    await container.close()
 
 
 @pytest.mark.asyncio
-async def test_encrypt_decrypt(aes_cipher):
-    """
-    Purpose: Validate symmetric encryption/decryption
-    Test Case: Encrypts plaintext → Decrypts ciphertext → Verifies original plaintext matches
-    Key Assertion: decrypted == plaintext
-    :param aes_cipher:
-    :return:
-    """
-    plaintext = "Secret message"
-    encrypted = await aes_cipher.encrypt(plaintext)
-    decrypted = await aes_cipher.decrypt(encrypted)
-    assert decrypted == plaintext
+async def test_encrypt_decrypt():
+    cipher, container = await get_aes_cipher()
+
+    try:
+        plaintext = "Secret message"
+        key = os.urandom(32)
+
+        encrypted = await cipher.encrypt(plaintext, key)
+        decrypted = await cipher.decrypt(encrypted, key)
+
+        assert decrypted == plaintext
+    finally:
+        await close_container(container)
 
 
 @pytest.mark.asyncio
 async def test_invalid_key():
-    """
-    Purpose: Verify key integrity protection
-    Test Case: Encrypts with key1, Attempts decryption with unrelated key2
-    Key Assertion: Raises ValueError on decryption attempt
-    :return:
-    """
-    plaintext = "Secret message"
+    cipher, container = await get_aes_cipher()
 
-    key1 = os.urandom(32)
-    cipher1 = AESGCMCipher(key1)
-    encrypted = await cipher1.encrypt(plaintext)
+    try:
+        plaintext = "Secret message"
+        key1 = os.urandom(32)
+        encrypted = await cipher.encrypt(plaintext, key1)
 
-    key2 = os.urandom(32)
-    cipher2 = AESGCMCipher(key2)
+        key2 = os.urandom(32)
 
-    with pytest.raises(ValueError):
-        await cipher2.decrypt(encrypted)
+        with pytest.raises(ValueError):
+            await cipher.decrypt(encrypted, key2)
+    finally:
+        await close_container(container)
 
 
 @pytest.mark.asyncio
-async def test_tampered_ciphertext(aes_cipher):
-    """
-    Purpose: Verify authentication tag validation
-    Test Case: Encrypts plaintext, Modifies 1 byte in ciphertext, Attempts decryption of tampered data
-    Key Assertion: Raises ValueError during decryption
-    :param aes_cipher:
-    :return:
-    """
-    plaintext = "Secret message"
-    encrypted = await aes_cipher.encrypt(plaintext)
+async def test_tampered_ciphertext():
+    cipher, container = await get_aes_cipher()
 
-    tampered = bytearray(base64.b64decode(encrypted))
-    tampered[15] ^= 0x01
-    tampered_encrypted = base64.b64encode(tampered).decode()
+    try:
+        plaintext = "Secret message"
+        key = os.urandom(32)
+        encrypted = await cipher.encrypt(plaintext, key)
 
-    with pytest.raises(ValueError):
+        # Подменяем байт в ciphertext
+        tampered = bytearray(base64.b64decode(encrypted))
+        tampered[15] ^= 0x01
+        tampered_encrypted = base64.b64encode(tampered).decode()
 
-        await aes_cipher.decrypt(tampered_encrypted)
+        with pytest.raises(ValueError):
+            await cipher.decrypt(tampered_encrypted, key)
+    finally:
+        await close_container(container)
+
+
+@pytest.mark.asyncio
+async def test_encrypt_with_wrong_key_length():
+    cipher, container = await get_aes_cipher()
+
+    try:
+        plaintext = "Secret message"
+        invalid_key = os.urandom(16)  # 16 bytes instead of required 32
+
+        with pytest.raises(ValueError, match="AES key must be 32 bytes long"):
+            await cipher.encrypt(plaintext, invalid_key)
+    finally:
+        await close_container(container)
+
+
+@pytest.mark.asyncio
+async def test_decrypt_with_wrong_key_length():
+    cipher, container = await get_aes_cipher()
+
+    try:
+        plaintext = "Secret message"
+        valid_key = os.urandom(32)
+        encrypted = await cipher.encrypt(plaintext, valid_key)
+
+        invalid_key = os.urandom(16)  # 16 bytes instead of required 32
+
+        with pytest.raises(ValueError, match="AES key must be 32 bytes long"):
+            await cipher.decrypt(encrypted, invalid_key)
+    finally:
+        await close_container(container)
+
+
+@pytest.mark.asyncio
+async def test_empty_plaintext():
+    cipher, container = await get_aes_cipher()
+
+    try:
+        plaintext = ""
+        key = os.urandom(32)
+
+        encrypted = await cipher.encrypt(plaintext, key)
+        decrypted = await cipher.decrypt(encrypted, key)
+
+        assert decrypted == plaintext
+    finally:
+        await close_container(container)
