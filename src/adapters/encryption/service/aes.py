@@ -28,7 +28,7 @@ class AbstractAES256Cipher(ABC):
     async def decrypt(
             self,
             ciphertext: str,
-            key: bytes  # Ключ передается как параметр
+            key: bytes
     ) -> str:
         """
         Decrypts the plaintext using symmetric block cipher algorithm
@@ -104,3 +104,4 @@ class AESGCMCipher(AbstractAES256Cipher):
         except Exception as e:
             self.logger.error(f"Decryption failed: {e}")
             raise
+
