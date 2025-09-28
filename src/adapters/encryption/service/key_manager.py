@@ -9,6 +9,7 @@ import logging
 from typing import Tuple
 import secrets
 
+
 class KeyManager:
     def __init__(self, iterations: int, logger: logging.Logger | None = None):
         self.iterations = iterations
@@ -99,7 +100,7 @@ class KeyManager:
         ciphertext = encryptor.update(master_key) + encryptor.finalize()
 
         encrypted_data = nonce + encryptor.tag + ciphertext
-        return encrypted_data, salt  # Возвращаем отдельно
+        return encrypted_data, salt
 
     async def decrypt_master_key(self, encrypted_master_key: bytes, password: str, salt: bytes) -> bytes:
         """Decrypt master key with password"""
@@ -148,8 +149,14 @@ class KeyManager:
             raise ValueError("Invalid encrypted data")
 
         salt = encrypted_data[:16]
-        encrypted_master_key = encrypted_data[16:16 + 28]
-        encrypted_private_key = encrypted_data[16 + 28:]
+        remaining_data = encrypted_data[16:]
+
+        # The encrypted_master_key has structure: nonce(12) + tag(16) + ciphertext(32) = 60 bytes
+        encrypted_master_key = remaining_data[:60]
+        encrypted_private_key = remaining_data[60:]
 
         master_key = await self.decrypt_master_key(encrypted_master_key, password, salt)
+        if master_key is None:
+            return None
+
         return await self.decrypt_with_master_key(encrypted_private_key, master_key)
