@@ -89,7 +89,7 @@ class BcryptPasswordHasher(AbstractPasswordHasher):
 
         try:
             # Use dummy hash if the provided hash is invalid
-            hash_bytes = hashed.encode('utf-8') if self._is_valid_bcrypt_hash(hashed) else self.DUMMY_HASH
+            hash_bytes = hashed.encode('utf-8') if self._is_valid_hash(hashed) else self.DUMMY_HASH
             return bcrypt.checkpw(password.encode(), hash_bytes)
         except Exception as e:
             self.logger.error(f"Password comparison error: {str(e)}", exc_info=True)
@@ -101,4 +101,5 @@ class BcryptPasswordHasher(AbstractPasswordHasher):
                 isinstance(hashed, str) and
                 hashed.startswith(('$2a$', '$2b$', '$2y$')) and
                 len(hashed) == 60
+
         )
