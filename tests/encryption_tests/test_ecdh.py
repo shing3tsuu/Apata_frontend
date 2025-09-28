@@ -1,105 +1,149 @@
 import pytest
 import asyncio
+from dishka import make_async_container
 
-from src.adapters.encryption.service import X25519Cipher
+from src.providers import AppProvider
+from src.adapters.encryption.service import AbstractECDHCipher
+
+
+async def get_ecdh_cipher():
+    container = make_async_container(AppProvider())
+    async with container() as request_container:
+        cipher = await request_container.get(AbstractECDHCipher)
+        return cipher, container
+
+
+async def close_container(container):
+    await container.close()
+
 
 @pytest.mark.asyncio
 async def test_key_exchange():
     """Test that two parties can derive the same shared key"""
-    alice_cipher = X25519Cipher()
-    bob_cipher = X25519Cipher()
+    cipher, container = await get_ecdh_cipher()
 
-    # Generate key pairs for both parties
-    alice_private, alice_public = await alice_cipher.generate_key_pair()
-    bob_private, bob_public = await bob_cipher.generate_key_pair()
+    try:
+        # Generate key pairs for both parties
+        alice_private, alice_public = await cipher.generate_key_pair()
+        bob_private, bob_public = await cipher.generate_key_pair()
 
-    # Each party derives the shared key
-    alice_shared = await alice_cipher.derive_shared_key(alice_private, bob_public)
-    bob_shared = await bob_cipher.derive_shared_key(bob_private, alice_public)
+        # Each party derives the shared key
+        alice_shared = await cipher.derive_shared_key(alice_private, bob_public)
+        bob_shared = await cipher.derive_shared_key(bob_private, alice_public)
 
-    # Both should have the same shared key
-    assert alice_shared == bob_shared
-    assert len(alice_shared) == 32  # 256-bit key
+        # Both should have the same shared key
+        assert alice_shared == bob_shared
+        assert len(alice_shared) == 32  # 256-bit key
+    finally:
+        await close_container(container)
 
 
 @pytest.mark.asyncio
 async def test_different_keys_produce_different_shared_secrets():
     """Test that different key pairs produce different shared secrets"""
-    cipher = X25519Cipher()
+    cipher, container = await get_ecdh_cipher()
 
-    # Generate two different key pairs
-    private1, public1 = await cipher.generate_key_pair()
-    private2, public2 = await cipher.generate_key_pair()
+    try:
+        # Generate two different key pairs
+        private1, public1 = await cipher.generate_key_pair()
+        private2, public2 = await cipher.generate_key_pair()
 
-    # Derive shared keys
-    shared1 = await cipher.derive_shared_key(private1, public2)
-    shared2 = await cipher.derive_shared_key(private2, public1)
+        # Derive shared keys
+        shared1 = await cipher.derive_shared_key(private1, public2)
+        shared2 = await cipher.derive_shared_key(private2, public1)
 
-    # These should be the same (symmetric)
-    assert shared1 == shared2
+        # These should be the same (symmetric)
+        assert shared1 == shared2
 
-    # Generate another key pair and verify it produces different results
-    private3, public3 = await cipher.generate_key_pair()
-    shared3 = await cipher.derive_shared_key(private1, public3)
+        # Generate another key pair and verify it produces different results
+        private3, public3 = await cipher.generate_key_pair()
+        shared3 = await cipher.derive_shared_key(private1, public3)
 
-    assert shared1 != shared3
+        assert shared1 != shared3
+    finally:
+        await close_container(container)
 
 
 @pytest.mark.asyncio
 async def test_key_serialization_deserialization():
     """Test that keys can be serialized and deserialized correctly"""
-    cipher = X25519Cipher()
+    cipher, container = await get_ecdh_cipher()
 
-    # Generate a key pair
-    private_pem, public_pem = await cipher.generate_key_pair()
+    try:
+        # Generate a key pair
+        private_pem, public_pem = await cipher.generate_key_pair()
 
-    # Verify PEM format
-    assert private_pem.startswith('-----BEGIN PRIVATE KEY-----')
-    assert private_pem.endswith('-----END PRIVATE KEY-----\n')
-    assert public_pem.startswith('-----BEGIN PUBLIC KEY-----')
-    assert public_pem.endswith('-----END PUBLIC KEY-----\n')
+        # Verify PEM format
+        assert private_pem.startswith('-----BEGIN PRIVATE KEY-----')
+        assert private_pem.endswith('-----END PRIVATE KEY-----\n')
+        assert public_pem.startswith('-----BEGIN PUBLIC KEY-----')
+        assert public_pem.endswith('-----END PUBLIC KEY-----\n')
 
-    # Test that we can use the serialized keys for key exchange
-    private2, public2 = await cipher.generate_key_pair()
-    shared1 = await cipher.derive_shared_key(private_pem, public2)
-    shared2 = await cipher.derive_shared_key(private2, public_pem)
+        # Test that we can use the serialized keys for key exchange
+        private2, public2 = await cipher.generate_key_pair()
+        shared1 = await cipher.derive_shared_key(private_pem, public2)
+        shared2 = await cipher.derive_shared_key(private2, public_pem)
 
-    # Should be able to derive a shared key
-    assert len(shared1) == 32
-    assert len(shared2) == 32
+        # Should be able to derive a shared key
+        assert len(shared1) == 32
+        assert len(shared2) == 32
+    finally:
+        await close_container(container)
 
 
 @pytest.mark.asyncio
 async def test_invalid_key_handling():
     """Test that invalid keys are handled properly"""
-    cipher = X25519Cipher()
+    cipher, container = await get_ecdh_cipher()
 
-    # Generate a valid key pair
-    private, public = await cipher.generate_key_pair()
+    try:
+        # Generate a valid key pair
+        private, public = await cipher.generate_key_pair()
 
-    # Test with invalid public key
-    with pytest.raises(Exception):
-        await cipher.derive_shared_key(private, "invalid public key")
+        # Test with invalid public key
+        with pytest.raises(Exception):
+            await cipher.derive_shared_key(private, "invalid public key")
 
-    # Test with invalid private key
-    with pytest.raises(Exception):
-        await cipher.derive_shared_key("invalid private key", public)
+        # Test with invalid private key
+        with pytest.raises(Exception):
+            await cipher.derive_shared_key("invalid private key", public)
+    finally:
+        await close_container(container)
 
 
 @pytest.mark.asyncio
 async def test_deterministic_shared_key():
     """Test that the same key pairs always produce the same shared key"""
-    cipher = X25519Cipher()
+    cipher, container = await get_ecdh_cipher()
 
-    # Generate key pairs
-    private1, public1 = await cipher.generate_key_pair()
-    private2, public2 = await cipher.generate_key_pair()
+    try:
+        # Generate key pairs
+        private1, public1 = await cipher.generate_key_pair()
+        private2, public2 = await cipher.generate_key_pair()
 
-    # Derive shared key multiple times
-    shared1 = await cipher.derive_shared_key(private1, public2)
-    shared2 = await cipher.derive_shared_key(private1, public2)
-    shared3 = await cipher.derive_shared_key(private1, public2)
+        # Derive shared key multiple times
+        shared1 = await cipher.derive_shared_key(private1, public2)
+        shared2 = await cipher.derive_shared_key(private1, public2)
+        shared3 = await cipher.derive_shared_key(private1, public2)
 
-    # All should be identical
+        # All should be identical
+        assert shared1 == shared2 == shared3
+    finally:
+        await close_container(container)
 
-    assert shared1 == shared2 == shared3
+
+@pytest.mark.asyncio
+async def test_concurrent_key_generation():
+    """Test that multiple key pairs can be generated concurrently"""
+    cipher, container = await get_ecdh_cipher()
+
+    try:
+        # Generate multiple key pairs concurrently
+        tasks = [cipher.generate_key_pair() for _ in range(5)]
+        results = await asyncio.gather(*tasks)
+
+        # Verify all keys are different
+        public_keys = [public for _, public in results]
+        assert len(public_keys) == len(set(public_keys))
+    finally:
+        await close_container(container)
