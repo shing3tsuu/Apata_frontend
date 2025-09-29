@@ -49,17 +49,19 @@ class AppProvider(Provider):
     async def key_manager(self, logger: logging.Logger) -> KeyManager:
         return KeyManager(iterations=600000,logger=logger)
 
-    @provide(scope=Scope.APP, finalizer="_close_client")
+    @provide(scope=Scope.APP, finalizer="close_client")
     async def api_client(self) -> CommonHTTPClient:
-        return CommonHTTPClient(
+        client = CommonHTTPClient(
             base_url="http://127.0.0.1:8000/",
             timeout=30.0,
             max_retries=3,
             retry_delay=1.0,
             logger=logger
         )
+        await client.initialize()
+        return client
 
-    async def _close_client(self, client: CommonHTTPClient):
+    async def close_client(self, client: CommonHTTPClient):
         await client.close()
 
     @provide(scope=Scope.REQUEST)
@@ -182,4 +184,5 @@ class AppProvider(Provider):
             common_dao=common_dao
 
         )
+
 
