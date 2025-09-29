@@ -52,8 +52,10 @@ class AppProvider(Provider):
     @provide(scope=Scope.APP)
     async def api_client(self) -> CommonHTTPClient:
         return CommonHTTPClient(
-            base_url="http://0.0.0.0:8000",
+            base_url="http://127.0.0.1:8000/",
             timeout=30.0,
+            max_retries=3,
+            retry_delay=1.0,
             logger=logger
         )
 
@@ -175,4 +177,5 @@ class AppProvider(Provider):
         return MessageService(
             message_dao=message_dao,
             common_dao=common_dao
+
         )
