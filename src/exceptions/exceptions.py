@@ -27,3 +27,4 @@ class NetworkError(InfrastructureError):
 
 class AuthenticationError(InfrastructureError):
     pass
+
