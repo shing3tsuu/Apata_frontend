@@ -5,7 +5,7 @@ from datetime import datetime
 
 from ..dao.auth import AuthHTTPDAO
 from src.adapters.encryption.service import AbstractECDSASignature, AbstractECDHCipher
-from src.exceptions import APIError, AuthenticationError
+from src.exceptions import *
 
 
 class AuthHTTPService:
@@ -47,12 +47,16 @@ class AuthHTTPService:
                 "ecdh_private_key": ecdh_private
             }
 
+        except KeyGenerationError as e:
+            self._logger.error(f"Key generation failed: {e}")
+            raise
         except APIError as e:
-            self._logger.error(f"Registration failed for {username}: {e}")
+            if e.status_code == 400 and "already exists" in str(e.response_data):
+                raise UserAlreadyExistsError(f"User {username} already exists") from e
             raise
         except Exception as e:
-            self._logger.error(f"Unexpected error during registration: {e}")
-            raise
+            self._logger.error(f"Registration failed: {e}")
+            raise InfrastructureError("Registration failed", original_error=e) from e
 
     async def login(self, username: str, ecdsa_private_key: str) -> dict[str, Any]:
         """
@@ -249,3 +253,4 @@ class AuthHTTPService:
         except Exception as e:
             self._logger.error(f"Health check failed: {e}")
             return False
+
