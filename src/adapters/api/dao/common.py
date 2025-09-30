@@ -77,41 +77,38 @@ class CommonHTTPClient:
     async def delete(self, endpoint: str) -> dict[str, Any]:
         return await self._request_with_retry("DELETE", endpoint)
 
-    async def _request_with_retry(self, method: str, endpoint: str, **kwargs) -> dict[str, Any]:
-        """
-        Performing a request with retries on network errors
-        """
+    async def _request_with_retry(self, method: str, endpoint: str, **kwargs) -> Dict[str, Any]:
         last_exception = None
 
         for attempt in range(self.max_retries):
             try:
                 return await self._request(method, endpoint, **kwargs)
-            except (NetworkError, InfrastructureError) as e:
-                last_exception = e
-                if attempt == self.max_retries - 1:
-                    break
 
-                delay = self.retry_delay * (2 ** attempt) # Exponential backoff
-                self._logger.warning(
-                    f"Attempt {attempt + 1}/{self.max_retries} failed for {method} {endpoint}. "
-                    f"Retrying in {delay}s. Error: {str(e)}"
-                )
-                await asyncio.sleep(delay)
             except APIError as e:
-                # API errors (4xx, 5xx) are not repeated, except for 5xx statuses
-                if e.status_code and e.status_code >= 500 and attempt < self.max_retries - 1:
-                    last_exception = e
+                if e.is_client_error:
+                    raise
+                last_exception = e
+                if attempt < self.max_retries - 1:
                     delay = self.retry_delay * (2 ** attempt)
-                    self._logger.warning(
-                        f"Server error {e.status_code} on attempt {attempt + 1}/{self.max_retries}. "
-                        f"Retrying in {delay}s."
-                    )
+                    self._logger.warning(f"Server error {e.status_code}, retrying in {delay}s")
                     await asyncio.sleep(delay)
                 else:
                     raise
 
-        # If all attempts have been exhausted
-        raise last_exception
+            except (NetworkError, InfrastructureError) as e:
+                last_exception = e
+                if attempt < self.max_retries - 1:
+                    delay = self.retry_delay * (2 ** attempt)
+                    self._logger.warning(f"Network error, retrying in {delay}s: {e}")
+                    await asyncio.sleep(delay)
+                else:
+                    raise
+
+            except Exception as e:
+                raise InfrastructureError(f"Unexpected error: {str(e)}", original_error=e)
+
+        if last_exception:
+            raise last_exception
 
     async def _request(self, method: str, endpoint: str, **kwargs) -> dict[str, Any]:
         if not self._client:
@@ -204,3 +201,4 @@ class CommonHTTPClient:
             "max_retries": self.max_retries,
             "has_token": self._current_token is not None
         }
+
