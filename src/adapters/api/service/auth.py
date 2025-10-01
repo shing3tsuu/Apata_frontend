@@ -215,7 +215,7 @@ class AuthHTTPService:
         return {
             "is_authenticated": self._is_authenticated,
             "has_token": self._current_token is not None,
-            "current_user": self._current_user.get("name") if self._current_user else None,
+            "current_user": self._current_user.get("username") if self._current_user else None,
             "user_id": self._current_user.get("id") if self._current_user else None
         }
 
@@ -253,4 +253,5 @@ class AuthHTTPService:
         except Exception as e:
             self._logger.error(f"Health check failed: {e}")
             return False
+
 
