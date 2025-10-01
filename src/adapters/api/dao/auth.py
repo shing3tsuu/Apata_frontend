@@ -35,6 +35,10 @@ class AuthHTTPDAO:
     async def register_user(self, username: str, ecdsa_public_key: str, ecdh_public_key: str) -> dict[str, Any]:
         """
         Register a new user.
+        :param username:
+        :param ecdsa_public_key:
+        :param ecdh_public_key:
+        :return:
         """
         data = {
             "username": username,
@@ -57,6 +61,8 @@ class AuthHTTPDAO:
     async def get_challenge(self, username: str) -> dict[str, Any]:
         """
         Receiving a challenge for authentication
+        :param username:
+        :return:
         """
         self._logger.debug(f"Requesting challenge for user: {username}")
         try:
@@ -73,6 +79,9 @@ class AuthHTTPDAO:
     async def login(self, username: str, signature: str) -> dict[str, Any]:
         """
         Authentication for the user
+        :param username:
+        :param signature:
+        :return:
         """
         data = {
             "username": username,
@@ -99,6 +108,7 @@ class AuthHTTPDAO:
     async def logout(self) -> dict[str, Any]:
         """
         Logout from the current session
+        :return:
         """
         if not self._current_token:
             self._logger.warning("No active session to logout from")
@@ -121,6 +131,7 @@ class AuthHTTPDAO:
     async def get_current_user(self) -> dict[str, Any]:
         """
         Getting information about the current user
+        :return:
         """
         if not self._current_token:
             raise ValueError("No authentication token available")
@@ -140,6 +151,8 @@ class AuthHTTPDAO:
     async def get_public_keys(self, user_id: int) -> dict[str, Any]:
         """
         Get user public keys
+        :param user_id:
+        :return:
         """
         if not self._current_token:
             raise ValueError("No authentication token available")
@@ -158,6 +171,8 @@ class AuthHTTPDAO:
     async def update_ecdsa_key(self, ecdsa_public_key: str) -> dict[str, Any]:
         """
         Updating the ECDSA public key
+        :param ecdsa_public_key:
+        :return:
         """
         if not self._current_token:
             raise ValueError("No authentication token available")
@@ -176,6 +191,8 @@ class AuthHTTPDAO:
     async def update_ecdh_key(self, ecdh_public_key: str) -> dict[str, Any]:
         """
         Updating the ECDH public key
+        :param ecdh_public_key:
+        :return:
         """
         if not self._current_token:
             raise ValueError("No authentication token available")
@@ -194,6 +211,7 @@ class AuthHTTPDAO:
     async def refresh_token(self) -> dict[str, Any]:
         """
         Refresh token (if API supports)
+        :return:
         """
         if not self._current_token:
             raise ValueError("No authentication token available")
@@ -217,6 +235,7 @@ class AuthHTTPDAO:
     async def validate_session(self) -> bool:
         """
         Checking the validity of the current session
+        :return:
         """
         if not self._current_token:
             return False
@@ -234,6 +253,7 @@ class AuthHTTPDAO:
     def get_session_status(self) -> dict[str, Any]:
         """
         Getting the status of the current session
+        :return:
         """
         return {
             "has_token": self._current_token is not None,
