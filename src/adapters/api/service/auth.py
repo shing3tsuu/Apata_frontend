@@ -28,6 +28,8 @@ class AuthHTTPService:
     async def register(self, username: str) -> dict[str, Any]:
         """
         User registration
+        :param username:
+        :return:
         """
         self._logger.info(f"Starting registration for user: {username}")
 
@@ -46,7 +48,6 @@ class AuthHTTPService:
                 "ecdsa_private_key": ecdsa_private,
                 "ecdh_private_key": ecdh_private
             }
-
         except KeyGenerationError as e:
             self._logger.error(f"Key generation failed: {e}")
             raise
@@ -61,6 +62,9 @@ class AuthHTTPService:
     async def login(self, username: str, ecdsa_private_key: str) -> dict[str, Any]:
         """
         User authentication
+        :param username:
+        :param ecdsa_private_key:
+        :return:
         """
         self._logger.info(f"Attempting login for user: {username}")
 
@@ -72,7 +76,7 @@ class AuthHTTPService:
             # Sign challenge with user's private key
             signature = await self._ecdsa_signer.sign_message(ecdsa_private_key, challenge)
 
-            # Аутентификация
+            # Authenticate
             result = await self._auth_dao.login(username, signature)
 
             # Save the token after successful login
@@ -97,6 +101,7 @@ class AuthHTTPService:
     async def logout(self) -> dict[str, Any]:
         """
         Logout from the session
+        :return:
         """
         if not self._is_authenticated:
             self._logger.warning("Attempted logout without active session")
@@ -115,6 +120,7 @@ class AuthHTTPService:
     async def get_current_user_info(self) -> dict[str, Any]:
         """
         Get information about the user
+        :return:
         """
         if not self._is_authenticated:
             raise AuthenticationError("Not authenticated")
@@ -135,6 +141,8 @@ class AuthHTTPService:
     async def get_public_keys(self, user_id: int) -> dict[str, Any]:
         """
         Getting public keys for a user
+        :param user_id:
+        :return:
         """
         if not self._is_authenticated:
             raise AuthenticationError("Not authenticated")
@@ -156,6 +164,7 @@ class AuthHTTPService:
     async def update_keys(self) -> Dict[str, Any]:
         """
         Update user's keys
+        :return:
         """
         if not self._is_authenticated:
             raise AuthenticationError("Not authenticated")
@@ -192,6 +201,7 @@ class AuthHTTPService:
     async def validate_session(self) -> bool:
         """
         Session validation
+        :return:
         """
         if not self._is_authenticated or not self._current_token:
             return False
@@ -208,9 +218,10 @@ class AuthHTTPService:
         except Exception:
             return True
 
-    def get_session_status(self) -> Dict[str, Any]:
+    def get_session_status(self) -> dict[str, Any]:
         """
         Getting current session status
+        :return:
         """
         return {
             "is_authenticated": self._is_authenticated,
@@ -222,6 +233,8 @@ class AuthHTTPService:
     def set_token(self, token: str):
         """
         Manual token installation (for session recovery cases)
+        :param token:
+        :return:
         """
         self._current_token = token
         self._auth_dao.set_token(token)
@@ -231,12 +244,14 @@ class AuthHTTPService:
     def get_current_token(self) -> str:
         """
         Getting the current token
+        :return:
         """
         return self._current_token
 
     def _clear_session(self):
         """
         Clearing session data
+        :return:
         """
         self._current_token = None
         self._current_user = None
@@ -247,11 +262,10 @@ class AuthHTTPService:
     async def health_check(self) -> bool:
         """
         Checking the availability of the authentication service
+        :return:
         """
         try:
             return await self._auth_dao.health_check()
         except Exception as e:
             self._logger.error(f"Health check failed: {e}")
             return False
-
-
