@@ -19,7 +19,6 @@ class LocalUser(Base):
     hashed_password: Mapped[str] = mapped_column(String(100), nullable=False) # bcrypt hashed password
     ecdsa_public_key: Mapped[str] = mapped_column(Text)
     ecdh_public_key: Mapped[str] = mapped_column(Text)
-    last_poll_id: Mapped[int] = mapped_column(default=0)  # last message pool id
 
 class Contact(Base):
     __tablename__ = "contacts"
@@ -64,4 +63,5 @@ class Message(Base):
         back_populates="messages",
         foreign_keys=[contact_id]
     )
+
 
