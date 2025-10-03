@@ -14,7 +14,7 @@ class MessageHTTPService:
             self,
             message_dao: MessageHTTPDAO,
             encryption_service: EncryptionService,
-            logger: logging.Logger | None = None
+            logger: logging.Logger = None
     ):
         self._message_dao = message_dao
         self._encryption_service = encryption_service
@@ -29,13 +29,13 @@ class MessageHTTPService:
             token: str
     ) -> dict[str, Any]:
         """
-        Sending an encrypted message
-        Args:
-            recipient_id: Recipient ID on the server
-            message: Message text
-            sender_private_key: Sender's private ECDH key (from the keyring)
-            recipient_public_key: Recipient's public ECDH key (from the contact database)
-            token: JWT authentication token
+        Sends an encrypted message to a recipient.
+        :param recipient_id:
+        :param message:
+        :param sender_private_key:
+        :param recipient_public_key:
+        :param token:
+        :return:
         """
         try:
             # Encrypt the message
@@ -48,7 +48,7 @@ class MessageHTTPService:
             # Send to the server
             result = await self._message_dao.send_message(
                 recipient_id=recipient_id,
-                message=encrypted_message,
+                message=encrypted_message,  # base64
                 token=token
             )
 
@@ -59,144 +59,132 @@ class MessageHTTPService:
             self._logger.error(f"Failed to send encrypted message: {e}")
             raise MessageDeliveryError(f"Message delivery failed: {e}")
 
-    async def receive_and_decrypt_messages(
+    async def receive_messages(
             self,
             last_message_id: int,
             timeout: int,
-            user_private_key: str,
-            get_sender_public_key_func: callable,  # Function for getting the public key by sender_id
             token: str
     ) -> dict[str, Any]:
         """
-        Receiving and decrypting messages
-        Args:
-            last_message_id: ID of the last received message
-            timeout: Long-polling timeout
-            user_private_key: User's private ECDH key (from the keyring)
-            get_sender_public_key_func: Function (sender_id -> public_key) for obtaining sender keys
-            token: JWT authentication token
-        """
-        try:
-            # Receiving messages from the server
-            messages_data = await self._message_dao.poll_messages(
-                last_message_id=last_message_id,
-                timeout=timeout,
-                token=token
-            )
-
-            if not messages_data.get("has_messages"):
-                return messages_data
-
-            # Decrypt each message
-            decrypted_messages = []
-            for message in messages_data["messages"]:
-                decrypted_message = await self._decrypt_single_message(
-                    message=message,
-                    user_private_key=user_private_key,
-                    get_sender_public_key_func=get_sender_public_key_func
-                )
-                decrypted_messages.append(decrypted_message)
-
-            return {
-                **messages_data,
-                "messages": decrypted_messages
-            }
-
-        except Exception as e:
-            self._logger.error(f"Failed to receive/decrypt messages: {e}")
-            raise
-
-    async def _decrypt_single_message(
-            self,
-            message: dict[str, Any],
-            user_private_key: str,
-            get_sender_public_key_func: callable
-    ) -> dict[str, Any]:
-        """
-        Decrypting one message
-        :param message:
-        :param user_private_key:
-        :param get_sender_public_key_func:
-        :return:
-        """
-        try:
-            if not message.get("encrypted_content"):
-                return {**message, "decryption_status": "not_encrypted"}
-
-            # Get the sender's public key via callback
-            sender_public_key = get_sender_public_key_func(message["sender_id"])
-            if not sender_public_key:
-                raise EncryptionError(f"No public key for sender {message['sender_id']}")
-
-            # Decrypt the message
-            decrypted_text = await self._encryption_service.decrypt_message(
-                encrypted_message=base64.b64decode(message["encrypted_content"]),
-                recipient_private_key=user_private_key,
-                sender_public_key=sender_public_key
-            )
-
-            return {
-                **message,
-                "decrypted_content": decrypted_text,
-                "decryption_status": "success"
-            }
-
-        except Exception as e:
-            self._logger.warning(f"Failed to decrypt message {message.get('id')}: {e}")
-            return {
-                **message,
-                "decrypted_content": None,
-                "decryption_status": "failed",
-                "decryption_error": str(e)
-            }
-
-    async def get_encrypted_conversation_history(
-            self,
-            other_user_id: int,
-            limit: int,
-            user_private_key: str,
-            get_contact_public_key_func: callable,  # Function to get the contact's public key
-            token: str
-    ) -> list[dict[str, Any]]:
-        """
-        Getting message history with decryption
-        :param other_user_id:
-        :param limit:
-        :param user_private_key:
-        :param get_contact_public_key_func:
+        Get messages from the server
+        last_message_id is needed to retrieve messages that were
+        received without requests and to avoid unnecessary requests
+        :param last_message_id:
+        :param timeout:
         :param token:
         :return:
         """
         try:
-            # Getting history from the server
-            history = await self._message_dao.get_conversation_history(
+            return await self._message_dao.poll_messages(
+                last_message_id=last_message_id,
+                timeout=timeout,
+                token=token
+            )
+        except Exception as e:
+            self._logger.error(f"Failed to receive messages: {e}")
+            raise
+
+    async def decrypt_message(
+            self,
+            encrypted_message: str,  # base64
+            user_private_key: str,
+            sender_public_key: str
+    ) -> str:
+        """
+        Decrypts a message using the provided keys.
+        :param encrypted_message:
+        :param user_private_key:
+        :param sender_public_key:
+        :return:
+        """
+        try:
+            return await self._encryption_service.decrypt_message(
+                encrypted_message=encrypted_message,
+                recipient_private_key=user_private_key,
+                sender_public_key=sender_public_key
+            )
+        except Exception as e:
+            self._logger.error(f"Failed to decrypt message: {e}")
+            raise EncryptionError(f"Decryption failed: {e}")
+
+    async def batch_decrypt_messages(
+            self,
+            encrypted_messages: List[dict[str, Any]],
+            user_private_key: str,
+            sender_public_keys: Dict[int, str]
+    ) -> list[dict[str, Any]]:
+        """
+        Decrypts a list of messages
+        :param encrypted_messages:
+        :param user_private_key:
+        :param sender_public_keys:
+        :return:
+        """
+        decrypted_messages = []
+
+        for message in encrypted_messages:
+            try:
+                # Receive encrypted content
+                encrypted_content = message.get("message")
+                if not encrypted_content:
+                    decrypted_message = {**message, "decryption_status": "not_encrypted"}
+                else:
+                    sender_id = message["sender_id"]
+                    if sender_id not in sender_public_keys:
+                        raise EncryptionError(f"No public key for sender {sender_id}")
+
+                    # Decrypt
+                    decrypted_text = await self.decrypt_message(
+                        encrypted_message=encrypted_content,
+                        user_private_key=user_private_key,
+                        sender_public_key=sender_public_keys[sender_id]
+                    )
+
+                    decrypted_message = {
+                        **message,
+                        "decrypted_content": decrypted_text,
+                        "decryption_status": "success"
+                    }
+
+            except Exception as e:
+                self._logger.warning(f"Failed to decrypt message {message.get('id')}: {e}")
+                decrypted_message = {
+                    **message,
+                    "decrypted_content": None,
+                    "decryption_status": "failed",
+                    "decryption_error": str(e)
+                }
+
+            decrypted_messages.append(decrypted_message)
+
+        return decrypted_messages
+
+    async def get_conversation_history(
+            self,
+            other_user_id: int,
+            limit: int,
+            token: str
+    ) -> list[dict[str, Any]]:
+        """
+        Get conversation history
+        :param other_user_id:
+        :param limit:
+        :param token:
+        :return:
+        """
+        try:
+            return await self._message_dao.get_conversation_history(
                 other_user_id=other_user_id,
                 limit=limit,
                 token=token
             )
-
-            # Deciphering history
-            decrypted_history = []
-            for message in history:
-                if message.get("encrypted_content"):
-                    decrypted_message = await self._decrypt_single_message(
-                        message=message,
-                        user_private_key=user_private_key,
-                        get_sender_public_key_func=get_contact_public_key_func
-                    )
-                    decrypted_history.append(decrypted_message)
-                else:
-                    decrypted_history.append(message)
-
-            return decrypted_history
-
         except Exception as e:
             self._logger.error(f"Failed to get conversation history: {e}")
             raise
 
-    async def acknowledge_messages(self, message_ids: list[int], token: str) -> dict[str, Any]:
+    async def acknowledge_messages(self, message_ids: List[int], token: str) -> dict[str, Any]:
         """
-        Confirmation of receipt of messages
+        Acknowledge messages
         :param message_ids:
         :param token:
         :return:
