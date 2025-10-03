@@ -8,7 +8,6 @@ class LocalUserDTO(BaseModel):
     hashed_password: str
     ecdsa_public_key: str
     ecdh_public_key: str
-    last_poll_id: int | None = None
 
 class LocalUserRequestDTO(LocalUserDTO):
     id: int
@@ -32,4 +31,5 @@ class MessageDTO(BaseModel):
     is_delivered: bool
 
 class MessageRequestDTO(MessageDTO):
+
     id: int
