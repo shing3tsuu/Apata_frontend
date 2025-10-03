@@ -1,7 +1,9 @@
 import logging
+from venv import logger
+
 from sqlalchemy.pool import StaticPool
 from typing import AsyncIterable
-from dishka import Provider, provide, Scope, from_context
+from dishka import Provider, provide, Scope
 from dishka import AsyncContainer, FromDishka
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
@@ -28,6 +30,13 @@ from src.adapters.encryption.service import (
 
 class AppProvider(Provider):
     scope = Scope.APP
+    @provide(scope=Scope.REQUEST)
+    async def logger(self) -> logging.Logger:
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
+        )
+        return logging.getLogger(__name__)
 
     @provide(scope=Scope.REQUEST)
     async def aes_cipher(self, logger: logging.Logger) -> AbstractAES256Cipher:
@@ -47,7 +56,7 @@ class AppProvider(Provider):
 
     @provide(scope=Scope.REQUEST)
     async def key_manager(self, logger: logging.Logger) -> KeyManager:
-        return KeyManager(iterations=600000,logger=logger)
+        return KeyManager(iterations=600000, logger=logger)
 
     @provide(scope=Scope.APP)
     async def api_client(self) -> CommonHTTPClient:
@@ -95,23 +104,25 @@ class AppProvider(Provider):
             self,
             message_dao: MessageHTTPDAO,
             encryption_service: EncryptionService,
-            auth_service: AuthHTTPService
+            logger: logging.Logger
     ) -> MessageHTTPService:
         return MessageHTTPService(
             message_dao=message_dao,
             encryption_service=encryption_service,
-            auth_service=auth_service
+            logger=logger
         )
 
     @provide(scope=Scope.REQUEST)
     async def encryption_service(
             self,
             ecdh_cipher: AbstractECDHCipher,
-            aes_cipher: AbstractAES256Cipher
+            aes_cipher: AbstractAES256Cipher,
+            logger: logging.Logger
     ) -> EncryptionService:
         return EncryptionService(
             ecdh_cipher=ecdh_cipher,
-            aes_cipher=aes_cipher
+            aes_cipher=aes_cipher,
+            logger=logger
         )
 
     @provide(scope=Scope.APP)
@@ -179,8 +190,4 @@ class AppProvider(Provider):
         return MessageService(
             message_dao=message_dao,
             common_dao=common_dao
-
         )
-
-
-
