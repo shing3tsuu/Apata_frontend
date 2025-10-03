@@ -15,7 +15,7 @@ class CommonHTTPClient:
     def __init__(
             self,
             base_url: str,
-            timeout: float = 30.0,
+            timeout: float = 60.0,
             max_retries: int = 3,
             retry_delay: float = 1.0,
             logger: logging.Logger | None = None
@@ -201,4 +201,5 @@ class CommonHTTPClient:
             "max_retries": self.max_retries,
             "has_token": self._current_token is not None
         }
+
 
