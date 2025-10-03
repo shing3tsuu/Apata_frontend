@@ -11,7 +11,7 @@ class MessageHTTPDAO:
         self._http_client = http_client
         self._logger = logging.getLogger(__name__)
 
-    async def send_message(self, recipient_id: int, message: bytes, token: str) -> dict[str, Any]:
+    async def send_message(self, recipient_id: int, message: str, token: str) -> dict[str, Any]:
         """
         Sending an encrypted message
         :param recipient_id:
@@ -22,7 +22,7 @@ class MessageHTTPDAO:
         self._http_client.set_auth_token(token)
         data = {
             "recipient_id": recipient_id,
-            "message": base64.b64encode(message).decode('utf-8'),
+            "message": message,
             "timestamp": datetime.utcnow().isoformat()
         }
         return await self._http_client.post("/send", data)
